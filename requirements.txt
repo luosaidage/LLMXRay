@@ -1,0 +1,10 @@
+fastapi
+uvicorn
+httpx
+pydantic
+pydantic-settings
+websockets
+python-multipart
+loguru
+pytest
+pytest-asyncio

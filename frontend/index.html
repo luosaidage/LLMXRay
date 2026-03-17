@@ -1,0 +1,284 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>LLM-XRay API 照妖镜</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Fira+Code:wght@400;500&display=swap');
+        .terminal {
+            font-family: 'Fira Code', monospace;
+            background-color: #1a1a1a;
+            color: #00ff00;
+        }
+        .log-entry {
+            border-left: 2px solid #333;
+            padding-left: 10px;
+            margin-bottom: 4px;
+        }
+        .risk-high { color: #ef4444; }
+        .risk-medium { color: #f59e0b; }
+        .risk-low { color: #3b82f6; }
+        .risk-safe { color: #10b981; }
+    </style>
+</head>
+<body class="bg-[#f3f4f6] text-[#1f2937] min-h-screen">
+    <div class="container mx-auto px-4 py-8 max-w-5xl">
+        <header class="text-center mb-12">
+            <h1 class="text-4xl font-bold text-[#111827] mb-2">🔍 LLM-XRay API 照妖镜</h1>
+            <p class="text-[#6b7280]">一键检测大模型中转 API 的纯净度与真实性</p>
+        </header>
+
+        <div class="grid grid-cols-1 lg:grid-cols-2 gap-8">
+            <!-- 左侧：输入区域 -->
+            <div class="space-y-6">
+                <div class="bg-white p-6 rounded-xl shadow-sm border border-[#e5e7eb]">
+                    <h2 class="text-xl font-semibold mb-4 flex items-center text-[#111827]">
+                        <span class="mr-2">📥</span> 导入 cURL 或手动输入
+                    </h2>
+                    <textarea 
+                        id="curlInput" 
+                        class="w-full h-48 bg-[#f9fafb] border border-[#e5e7eb] rounded-lg p-3 text-sm font-mono text-blue-600 focus:ring-2 focus:ring-blue-500 focus:outline-none"
+                        placeholder="在此粘贴 curl 命令..."
+                    ></textarea>
+                    <button 
+                        onclick="parseCurl()"
+                        class="mt-3 w-full bg-[#3b82f6] hover:bg-blue-700 text-white font-medium py-2 rounded-lg transition-colors"
+                    >
+                        自动解析 cURL
+                    </button>
+                </div>
+
+                <div class="bg-white p-6 rounded-xl shadow-sm border border-[#e5e7eb]">
+                    <h2 class="text-xl font-semibold mb-4 flex items-center text-[#111827]">
+                        <span class="mr-2">⚙️</span> 检测参数
+                    </h2>
+                    <div class="space-y-4">
+                        <div>
+                            <label class="block text-sm text-[#6b7280] mb-1">API Base URL</label>
+                            <input id="apiUrl" type="text" class="w-full bg-[#f9fafb] border border-[#e5e7eb] rounded-lg p-2 text-sm focus:ring-2 focus:ring-blue-500" placeholder="https://api.example.com/v1">
+                        </div>
+                        <div>
+                            <label class="block text-sm text-[#6b7280] mb-1">API Key</label>
+                            <input id="apiKey" type="password" class="w-full bg-[#f9fafb] border border-[#e5e7eb] rounded-lg p-2 text-sm focus:ring-2 focus:ring-blue-500" placeholder="sk-...">
+                        </div>
+                        <div>
+                            <label class="block text-sm text-[#6b7280] mb-1">目标模型 (号称)</label>
+                            <input id="targetModel" type="text" class="w-full bg-[#f9fafb] border border-[#e5e7eb] rounded-lg p-2 text-sm focus:ring-2 focus:ring-blue-500" placeholder="gpt-4o">
+                        </div>
+                        <button 
+                            id="startScanBtn"
+                            onclick="startScan()"
+                            class="w-full bg-[#10b981] hover:bg-green-700 text-white font-bold py-3 rounded-lg shadow-sm transition-all transform hover:scale-[1.02] active:scale-[0.98]"
+                        >
+                            开始全面体检
+                        </button>
+                    </div>
+                </div>
+            </div>
+
+            <!-- 右侧：实时日志与结果 -->
+            <div class="space-y-6">
+                <div class="bg-white p-6 rounded-xl shadow-sm border border-[#e5e7eb] flex flex-col h-[600px]">
+                    <h2 class="text-xl font-semibold mb-4 flex items-center justify-between text-[#111827]">
+                        <span class="flex items-center"><span class="mr-2">📟</span> 实时检测日志</span>
+                        <span id="scanStatus" class="text-xs px-2 py-1 rounded bg-[#f3f4f6] text-[#6b7280]">就绪</span>
+                    </h2>
+                    
+                    <!-- 进度条 -->
+                    <div class="w-full bg-[#f3f4f6] rounded-full h-2 mb-4 overflow-hidden">
+                        <div id="progressBar" class="bg-[#3b82f6] h-full w-0 transition-all duration-300"></div>
+                    </div>
+
+                    <!-- 终端日志 -->
+                    <div id="terminal" class="terminal flex-1 overflow-y-auto p-4 rounded-lg text-xs leading-relaxed">
+                        <div class="text-gray-500 italic">等待任务启动...</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- 结果报告模态框 (极简版) -->
+        <div id="reportModal" class="fixed inset-0 bg-black/50 hidden items-center justify-center z-50 p-4 backdrop-blur-sm">
+            <div class="bg-white border border-[#e5e7eb] rounded-2xl max-w-md w-full p-8 shadow-2xl text-center">
+                <div id="reportContent" class="space-y-6">
+                    <!-- 报告内容将由 JS 填充 -->
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        const API_BASE = window.location.origin;
+        const WS_BASE = (window.location.protocol === 'https:' ? 'wss://' : 'ws://') + window.location.host;
+
+        function parseCurl() {
+            const curl = document.getElementById('curlInput').value.trim();
+            if (!curl) return;
+
+            // 极简解析逻辑
+            try {
+                // 解析 URL
+                const urlMatch = curl.match(/--url\s+[`"']?([^`"'\s]+)[`"']?/i) || curl.match(/curl\s+[`"']?([^`"'\s]+)[`"']?/i);
+                if (urlMatch) {
+                    let fullUrl = urlMatch[1];
+                    // 尝试剥离 /chat/completions 等后缀以获取 Base URL
+                    const baseUrl = fullUrl.split('/chat/completions')[0];
+                    document.getElementById('apiUrl').value = baseUrl;
+                }
+
+                // 解析 API Key
+                const authMatch = curl.match(/-H\s+['"]Authorization:\s*Bearer\s+([^'"]+)['"]/i) || curl.match(/--header\s+['"]Authorization:\s*Bearer\s+([^'"]+)['"]/i);
+                if (authMatch) {
+                    document.getElementById('apiKey').value = authMatch[1];
+                }
+
+                // 解析 Model
+                const dataMatch = curl.match(/--data\s+'([\s\S]+?)'/i) || curl.match(/-d\s+'([\s\S]+?)'/i);
+                if (dataMatch) {
+                    const data = JSON.parse(dataMatch[1]);
+                    if (data.model) {
+                        document.getElementById('targetModel').value = data.model;
+                    }
+                }
+                
+                addLog("cURL 解析成功！已自动填充参数。", "text-blue-400");
+            } catch (e) {
+                console.error(e);
+                alert("cURL 解析失败，请手动检查格式或补充参数。");
+            }
+        }
+
+        function addLog(msg, colorClass = "text-green-400") {
+            const term = document.getElementById('terminal');
+            const entry = document.createElement('div');
+            entry.className = `log-entry ${colorClass}`;
+            const time = new Date().toLocaleTimeString();
+            entry.innerHTML = `<span class="text-gray-600">[${time}]</span> ${msg}`;
+            term.appendChild(entry);
+            term.scrollTop = term.scrollHeight;
+        }
+
+        async function startScan() {
+            const apiUrl = document.getElementById('apiUrl').value;
+            const apiKey = document.getElementById('apiKey').value;
+            const targetModel = document.getElementById('targetModel').value;
+
+            if (!apiUrl || !apiKey || !targetModel) {
+                alert("请填写完整的 API 参数");
+                return;
+            }
+
+            // 清空界面
+            document.getElementById('terminal').innerHTML = "";
+            document.getElementById('progressBar').style.width = "0%";
+            document.getElementById('scanStatus').innerText = "正在初始化...";
+            document.getElementById('startScanBtn').disabled = true;
+            document.getElementById('startScanBtn').innerText = "检测中...";
+
+            try {
+                addLog("正在提交检测任务到后端...", "text-blue-400");
+                const response = await fetch(`${API_BASE}/api/v1/scans/`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        api_url: apiUrl,
+                        api_key: apiKey,
+                        target_model: targetModel
+                    })
+                });
+
+                const task = await response.json();
+                addLog(`任务已创建，ID: ${task.task_id}`, "text-yellow-400");
+                
+                // 建立 WebSocket 连接
+                connectWebSocket(task.task_id);
+
+            } catch (e) {
+                addLog(`提交任务失败: ${e.message}`, "text-red-500");
+                document.getElementById('startScanBtn').disabled = false;
+                document.getElementById('startScanBtn').innerText = "开始全面体检";
+            }
+        }
+
+        function connectWebSocket(taskId) {
+            const ws = new WebSocket(`${WS_BASE}/api/v1/scans/ws/${taskId}`);
+            
+            ws.onmessage = (event) => {
+                const msg = JSON.parse(event.data);
+                
+                if (msg.type === 'log') {
+                    addLog(msg.message);
+                    if (msg.data && msg.data.progress) {
+                        document.getElementById('progressBar').style.width = `${msg.data.progress}%`;
+                        document.getElementById('scanStatus').innerText = `检测进度: ${msg.data.progress}%`;
+                    }
+                } else if (msg.type === 'complete') {
+                    document.getElementById('progressBar').style.width = "100%";
+                    document.getElementById('scanStatus').innerText = "检测完成";
+                    addLog("🎉 检测圆满结束！正在生成报告...", "text-green-400 font-bold");
+                    showReport(msg.data);
+                    resetButton();
+                } else if (msg.type === 'error') {
+                    addLog(`❌ 错误: ${msg.message}`, "text-red-500");
+                    resetButton();
+                }
+            };
+
+            ws.onerror = () => addLog("WebSocket 连接错误", "text-red-500");
+            ws.onclose = () => addLog("连接已断开", "text-gray-500");
+        }
+
+        function resetButton() {
+            document.getElementById('startScanBtn').disabled = false;
+            document.getElementById('startScanBtn').innerText = "开始全面体检";
+        }
+
+        function showReport(report) {
+            const modal = document.getElementById('reportModal');
+            const content = document.getElementById('reportContent');
+            
+            const riskClass = `risk-${report.risk_level.toLowerCase()}`;
+            
+            content.innerHTML = `
+                <div class="py-4">
+                    <div class="text-6xl mb-4">🎯</div>
+                    <h3 class="text-2xl font-bold text-[#111827] mb-2">体检已完成</h3>
+                    <p class="text-[#6b7280] mb-6">本次检测综合评分如下</p>
+                    
+                    <div class="bg-[#f9fafb] rounded-2xl p-8 mb-8 border border-[#e5e7eb]">
+                        <div class="text-sm text-[#6b7280] uppercase tracking-wider mb-2">综合纯净度得分</div>
+                        <div class="text-7xl font-black ${riskClass} mb-2">${report.total_score.toFixed(1)}</div>
+                        <div class="inline-block px-4 py-1 rounded-full text-white font-bold bg-current ${riskClass}" style="background-color: currentColor;">
+                            <span class="text-white">${report.risk_level}</span>
+                        </div>
+                    </div>
+
+                    <button 
+                        onclick="window.open('${API_BASE}/api/v1/scans/${report.task_id}/report/html', '_blank')"
+                        class="w-full bg-[#3b82f6] hover:bg-blue-700 text-white font-bold py-4 rounded-xl shadow-lg transition-all transform hover:scale-[1.02] active:scale-[0.98] flex items-center justify-center"
+                    >
+                        <span class="mr-2">📊</span> 查看完整可视化报告
+                    </button>
+                    
+                    <button 
+                        onclick="closeModal()"
+                        class="mt-4 text-[#6b7280] hover:text-[#111827] text-sm font-medium"
+                    >
+                        返回首页
+                    </button>
+                </div>
+            `;
+
+            modal.classList.remove('hidden');
+            modal.classList.add('flex');
+        }
+
+        function closeModal() {
+            document.getElementById('reportModal').classList.add('hidden');
+            document.getElementById('reportModal').classList.remove('flex');
+        }
+    </script>
+</body>
+</html>

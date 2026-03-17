@@ -1,0 +1,16 @@
+[project]
+name = "llm-xray"
+version = "0.1.0"
+description = "Add your description here"
+readme = "README.md"
+requires-python = ">=3.12"
+dependencies = [
+    "fastapi>=0.135.1",
+    "httpx>=0.28.1",
+    "loguru>=0.7.3",
+    "pydantic>=2.12.5",
+    "pydantic-settings>=2.13.1",
+    "python-multipart>=0.0.22",
+    "uvicorn>=0.42.0",
+    "websockets>=16.0",
+]
